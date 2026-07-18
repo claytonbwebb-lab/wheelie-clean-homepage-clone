@@ -91,7 +91,20 @@
       copyEl.textContent = count === 0 ? 'Choose any 1 bin for £5.00, any 2 for £9.00, or all 3 for £12.00.' : count === 1 ? '1 bin selected — £5.00.' : `${count} bins selected — £${price}.00 (${saving ? `£${saving}.00 saving` : 'best price'}).`;
       submit.disabled = !(count > 0 && areaOk);
     }
-    form.querySelectorAll('.wc-bin-card').forEach(card => card.addEventListener('click', () => { const id = card.dataset.bin; selected.has(id) ? selected.delete(id) : selected.add(id); card.classList.toggle('is-selected', selected.has(id)); card.setAttribute('aria-pressed', selected.has(id)); update(); }));
+    function syncCards() {
+      form.querySelectorAll('.wc-bin-card').forEach(card => {
+        card.classList.toggle('is-selected', selected.has(card.dataset.bin));
+        card.setAttribute('aria-pressed', selected.has(card.dataset.bin));
+      });
+    }
+    window.wcSelectBins = function(ids = []) {
+      selected.clear();
+      ids.forEach(id => selected.add(id));
+      syncCards();
+      update();
+      document.getElementById('booking-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    form.querySelectorAll('.wc-bin-card').forEach(card => card.addEventListener('click', () => { const id = card.dataset.bin; selected.has(id) ? selected.delete(id) : selected.add(id); syncCards(); update(); }));
     postcode.addEventListener('input', () => { const val = postcode.value.trim().toUpperCase(); areaResult.className = 'wc-area-result'; areaOk = false; if (val.length >= 2) { areaOk = covered(val); areaResult.classList.add(areaOk ? 'ok' : 'no'); areaResult.textContent = areaOk ? `✓ We cover ${val} for bin cleaning.` : `Sorry, bin cleaning is currently limited to ${VALID_AREAS.join(', ')}. Use the quote form for other services.`; } update(); });
     form.addEventListener('submit', async e => { e.preventDefault(); status.textContent = 'Sending…'; submit.disabled = true; const fd = new FormData(form); const payload = Object.fromEntries(fd.entries()); payload.bins = [...selected].map(id => binNames[id]); payload.source = location.pathname; try { const r = await fetch('/api/bin-booking', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); const data = await r.json(); if (!r.ok || !data.success) throw new Error(data.error || 'Could not send'); status.textContent = `Sent — reference ${data.reference}.`; form.reset(); selected.clear(); form.querySelectorAll('.wc-bin-card').forEach(c => { c.classList.remove('is-selected'); c.setAttribute('aria-pressed','false'); }); areaOk = false; areaResult.className = 'wc-area-result'; update(); } catch (err) { status.textContent = err.message || 'Could not send. Please call instead.'; update(); } });
     update();
@@ -109,6 +122,21 @@
       el.addEventListener('click', e => { e.preventDefault(); location.href = '/bin-cleaning/#booking-form'; });
       el.textContent = 'Book / Request Quote';
     });
+
+    // Original WordPress shortcode form posted to /wp-admin/admin-ajax.php.
+    // In the static clone that route is forbidden on Vercel, so convert it into
+    // a hand-off to the replacement booking form and carry over the ticked bins.
+    const legacyBinForm = document.getElementById('bin-form');
+    if (legacyBinForm) {
+      legacyBinForm.setAttribute('action', '#booking-form');
+      legacyBinForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const map = { '1139': 'black', '1140': 'brown', '1138': 'green' };
+        const ids = [...legacyBinForm.querySelectorAll('input[name="bin[]"]:checked')].map(input => map[input.value]).filter(Boolean);
+        if (typeof window.wcSelectBins === 'function') window.wcSelectBins(ids);
+        else document.getElementById('booking-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountForms); else mountForms();
