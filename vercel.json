@@ -1,4 +1,8 @@
 {
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": true,
+  "rewrites": [
+    { "source": "/api/bin-booking", "destination": "/api/bin-booking.js" },
+    { "source": "/api/quote", "destination": "/api/quote.js" }
+  ]
 }
